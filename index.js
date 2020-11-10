@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs-extra');
 const fileUpload = require('express-fileupload')
 const MongoClient = require('mongodb').MongoClient;
+const ObjectId = require('mongodb').ObjectId;
 require('dotenv').config()
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.hia2w.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 const app = express()
@@ -18,14 +19,14 @@ const port = 5000;
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 client.connect(err => {
+  console.log("db connected")
   const productsCollection = client.db("testEcommerce").collection("allProducts");
+
   // perform actions on the collection object
-  const ordersCollection = client.db("testEcommerce").collection("orders");
   const promoCodesCollection = client.db("testEcommerce").collection("promoCodes");
-  const reviewCollection = client.db("testEcommerce").collection("reviews");
-   
 
 
+   // add products to show them in the home page
 app.post('/addProduct', (req, res) => {
   const file = req.files.file
   const encImg = file.data.toString('base64')
@@ -34,19 +35,50 @@ app.post('/addProduct', (req, res) => {
       size: file.size,
       img: Buffer.from(encImg, 'base64')
   }
-  const { name, shipping, size, color, price,discount, status } = req.body
-  productsCollection.insertOne({ name, shipping, size, color, price,discount, status,image })
+  const { name, shipping, size, color, price,discount, status, condition } = req.body
+  productsCollection.insertOne({ name, shipping, size, color, price,discount, status,image, condition })
       .then(result => {
           return res.send(result.insertedCount > 0)
       })
 })
 
+//  to get products in the client side conditionally
 app.get('/getProducts', (req, res) => {
-  productsCollection.find({})
+  productsCollection.find({ condition: 'true'})
       .toArray((err, documents) => {
         res.send(documents)
       })
   })
+
+  //  to get  products following the order status
+
+  app.get("/getCondProduct", (req, res) => {
+    const condition = parseInt(req.query.status) ;
+    let filtered = {} ;
+    if(condition){
+      filtered = {
+        status: condition
+      }
+    }
+    productsCollection
+      .find(filtered)
+      .toArray((err, documents) => {
+        res.send(documents);
+      });
+  });
+
+
+    //to read the products
+    app.get("/searchedProducts", (req, res) => {
+      const search = req.query.search;
+      console.log(search)
+      productsCollection
+        .find({ name: { $regex: search } })
+        .toArray((err, documents) => {
+          res.send(documents);
+        });
+    });
+
 // adding promo code
   
 app.post('/addPromoCode', (req, res) => {
@@ -59,10 +91,19 @@ app.post('/addPromoCode', (req, res) => {
       })
 })
 
+//  to get promo codes  conditionally
+app.get('/getPromoCodes', (req, res) => {
+  promoCodesCollection.find({})
+      .toArray((err, documents) => {
+        res.send(documents)
+      })
+  })
+
+  // for updating order status
 
   app.patch('/updateOrder', (req, res) => {
     console.log(req.body)
-    ordersCollection.updateOne({ _id:ObjectId(req.body.id) },
+    productsCollection.updateOne({ _id:ObjectId(req.body.id) },
         {
             $set: { status: req.body.status }
         })
@@ -71,25 +112,6 @@ app.post('/addPromoCode', (req, res) => {
             res.send(result)
         })
 })
-// app.patch('/updateOrder/:id', (req, res) => {
-//     ordersCollection.updateOne({ _id: ObjectId(req.params.id) },
-//       {
-//         $set: { status: req.body.status }
-//       })
-//       .then(result => {
-//         console.log(result)
-//         res.send(result.modifiedCount > 0)
-//       })
-//   });
-
-app.get('/userOrder/:email', (req, res) => {
-  const email = req.params.email;
-  ordersCollection.find({ email })
-      .toArray((err, documents) => {
-          res.send(documents)
-      })
-})
-
 
 
 
